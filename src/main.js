@@ -22,11 +22,18 @@ function setStatus(msg) {
 function haversineMeters(lat1, lon1, lat2, lon2) {
   const R = 6371000;
   const toRad = d => d * Math.PI / 180;
-  const p1 = toRad(lat1), p2 = toRad(lat2);
+
+  const p1 = toRad(lat1);
+  const p2 = toRad(lat2);
   const dp = toRad(lat2 - lat1);
   const dl = toRad(lon2 - lon1);
-  const a = Math.sin(dp/2)**2 +
-            Math.cos(p1) * Math.cos(p2) * Math.sin(dl/2)**2;
+
+  const a =
+    Math.sin(dp / 2) ** 2 +
+    Math.cos(p1) *
+    Math.cos(p2) *
+    Math.sin(dl / 2) ** 2;
+
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
@@ -38,27 +45,31 @@ function makeBox(color, size = 10) {
 }
 
 btn.addEventListener("click", async () => {
+
   btn.disabled = true;
   btn.textContent = "INICIANDO...";
   setStatus("Solicitando cámara y sensores...");
 
   try {
+
     const app = new App({
       canvas,
+
       cameraOptions: {
         hFov: 80,
         near: 0.001,
         far: 2000
       },
+
       videoConstraints: {
-        video: { facingMode: "environment" }
+        video: {
+          facingMode: "environment"
+        }
       }
     });
 
-    // App.start() inicia cámara/orientación y entrega el objeto LocAR.
     const locar = await app.start();
 
-    // Configurar GPS ANTES de arrancarlo.
     locar.setGpsOptions({
       enableHighAccuracy: true,
       maximumAge: 0,
@@ -68,68 +79,69 @@ btn.addEventListener("click", async () => {
     let objectsAdded = false;
 
     locar.on("gpserror", (err) => {
+
       const code = err?.code ?? "";
       const msg = err?.message ?? "Error desconocido";
+
       setStatus(`Error GPS ${code}: ${msg}`);
+
       btn.disabled = false;
       btn.textContent = "REINTENTAR";
     });
 
     locar.on("gpsupdate", async (ev) => {
+
       const c = ev.position.coords;
 
       coordsEl.textContent =
         `GPS: ${c.latitude.toFixed(7)}, ${c.longitude.toFixed(7)}`;
+
       accuracyEl.textContent =
         `Precisión: ${Math.round(c.accuracy)} m`;
 
       const dist = haversineMeters(
-        c.latitude, c.longitude, TARGET.lat, TARGET.lon
+        c.latitude,
+        c.longitude,
+        TARGET.lat,
+        TARGET.lon
       );
+
       distanceEl.textContent =
         `Distancia al Laboratorio: ${Math.round(dist)} m`;
 
-      // IMPORTANTE:
-      // LocAR no puede convertir lat/lon a coordenadas 3D antes de tener
-      // una posición GPS inicial. Por eso los objetos se agregan recién
-      // dentro del primer gpsupdate.
       if (!objectsAdded) {
-        const loader = new GLTFLoader();
 
-const gltf = await loader.loadAsync(
-  "/models/router.glb"
-);
-
-const router = gltf.scene;
-
-router.scale.set(
-  5,
-  5,
-  5
-);
-
-router.rotation.set(
-  0,
-  0,
-  0
-);
-
-locar.add(
-  router,
-  TARGET.lon,
-  TARGET.lat,
-  5
-);
+        // =========================
+        // CUBOS DE CALIBRACIÓN
+        // =========================
 
         const refs = [
-          { dLat:  0.0005, dLon:  0,      color: 0xff0000 }, // norte
-          { dLat: -0.0005, dLon:  0,      color: 0xffff00 }, // sur
-          { dLat:  0,      dLon: -0.0005, color: 0x00ffff }, // oeste
-          { dLat:  0,      dLon:  0.0005, color: 0x00ff00 }  // este
+          {
+            dLat: 0.0005,
+            dLon: 0,
+            color: 0xff0000
+          },
+          {
+            dLat: -0.0005,
+            dLon: 0,
+            color: 0xffff00
+          },
+          {
+            dLat: 0,
+            dLon: -0.0005,
+            color: 0x00ffff
+          },
+          {
+            dLat: 0,
+            dLon: 0.0005,
+            color: 0x00ff00
+          }
         ];
 
         for (const r of refs) {
+
           const box = makeBox(r.color, 10);
+
           locar.add(
             box,
             c.longitude + r.dLon,
@@ -139,18 +151,67 @@ locar.add(
         }
 
         objectsAdded = true;
-        setStatus("GPS inicial recibido. Gira lentamente 360° y busca los cubos.");
+
+        setStatus(
+          "GPS inicial recibido. Gira lentamente 360° y busca los cubos."
+        );
+
         btn.style.display = "none";
+
+        // =========================
+        // CARGAR ROUTER
+        // =========================
+
+        try {
+
+          const loader = new GLTFLoader();
+
+          const gltf = await loader.loadAsync(
+            "/models/router.glb"
+          );
+
+          const router = gltf.scene;
+
+          router.scale.set(5, 5, 5);
+          router.rotation.set(0, 0, 0);
+
+          locar.add(
+            router,
+            TARGET.lon,
+            TARGET.lat,
+            5
+          );
+
+        } catch (error) {
+
+          console.error(
+            "Error cargando router.glb:",
+            error
+          );
+
+          setStatus(
+            "GPS funcionando. No se pudo cargar el router."
+          );
+        }
       }
     });
 
-    setStatus("Cámara iniciada. Solicitando ubicación GPS...");
+    setStatus(
+      "Cámara iniciada. Solicitando ubicación GPS..."
+    );
+
     await locar.startGps();
 
   } catch (e) {
+
     console.error(e);
+
     const msg = e?.message || String(e);
-    setStatus(`No se pudo iniciar AR: ${msg}`);
+
+    setStatus(
+      `No se pudo iniciar AR: ${msg}`
+    );
+
     btn.disabled = false;
     btn.textContent = "REINTENTAR";
   }
