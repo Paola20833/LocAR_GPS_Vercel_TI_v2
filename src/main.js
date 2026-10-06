@@ -47,17 +47,15 @@ function makeBox(color, size = 10) {
 btn.addEventListener("click", async () => {
   btn.disabled = true;
   btn.textContent = "INICIANDO...";
+  setStatus("Solicitando cámara...");
 
   try {
-    // ----------------------------------------------------
-    // 1. COMPROBAR CÁMARA DIRECTAMENTE EN EL TELÉFONO
-    // ----------------------------------------------------
-    setStatus("Solicitando acceso a la cámara...");
-
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      throw new Error(
-        "Este navegador no permite acceder a la cámara."
-      );
+    // Comprobar que el navegador puede acceder a la cámara
+    if (
+      !navigator.mediaDevices ||
+      !navigator.mediaDevices.getUserMedia
+    ) {
+      throw new Error("El navegador no permite acceder a la cámara.");
     }
 
     let cameraStream = null;
@@ -67,12 +65,6 @@ btn.addEventListener("click", async () => {
         video: {
           facingMode: {
             ideal: "environment"
-          },
-          width: {
-            ideal: 1280
-          },
-          height: {
-            ideal: 720
           }
         },
         audio: false
@@ -80,47 +72,27 @@ btn.addEventListener("click", async () => {
 
       console.log("Cámara activada correctamente.");
 
-      const videoTrack = cameraStream.getVideoTracks()[0];
-
-      if (videoTrack) {
-        console.log(
-          "Cámara:",
-          videoTrack.label
-        );
-      }
-
       setStatus("Cámara activada. Iniciando AR...");
     } catch (cameraError) {
-      console.error("ERROR DE CÁMARA:", cameraError);
+      console.error("Error de cámara:", cameraError);
 
       throw new Error(
         "No se pudo activar la cámara. Revisa los permisos de Chrome."
       );
     }
 
-    // ----------------------------------------------------
-    // 2. INICIAR LOCAR
-    // ----------------------------------------------------
-
+    // Iniciar LocAR
     const app = new App({
-      canvas,
-
+      canvas: canvas,
       cameraOptions: {
         hFov: 80,
         near: 0.001,
         far: 2000
       },
-
       videoConstraints: {
         video: {
           facingMode: {
             ideal: "environment"
-          },
-          width: {
-            ideal: 1280
-          },
-          height: {
-            ideal: 720
           }
         }
       }
@@ -128,18 +100,14 @@ btn.addEventListener("click", async () => {
 
     const locar = await app.start();
 
-    // La cámara de prueba ya confirmó que Android permite acceso.
-    // Detenemos esa cámara para evitar que dos streams compitan.
+    // Detener la cámara de prueba
     if (cameraStream) {
       cameraStream.getTracks().forEach((track) => {
         track.stop();
       });
     }
 
-    // ----------------------------------------------------
-    // 3. CONFIGURACIÓN GPS
-    // ----------------------------------------------------
-
+    // Configuración GPS
     locar.setGpsOptions({
       enableHighAccuracy: true,
       maximumAge: 0,
@@ -148,33 +116,22 @@ btn.addEventListener("click", async () => {
 
     let objectsAdded = false;
 
-    // ----------------------------------------------------
-    // 4. ERROR GPS
-    // ----------------------------------------------------
-
+    // Error GPS
     locar.on("gpserror", (err) => {
-      console.error("ERROR GPS:", err);
+      console.error("Error GPS:", err);
 
       const code = err?.code ?? "";
       const msg = err?.message ?? "Error desconocido";
 
-      setStatus(
-        `Error GPS ${code}: ${msg}`
-      );
+      setStatus(`Error GPS ${code}: ${msg}`);
 
       btn.disabled = false;
       btn.textContent = "REINTENTAR";
     });
 
-    // ----------------------------------------------------
-    // 5. ACTUALIZACIÓN GPS
-    // ----------------------------------------------------
-
+    // Actualización GPS
     locar.on("gpsupdate", async (ev) => {
       const c = ev.position.coords;
-
-      console.log("GPS:", c.latitude, c.longitude);
-      console.log("Precisión:", c.accuracy);
 
       coordsEl.textContent =
         `GPS: ${c.latitude.toFixed(7)}, ${c.longitude.toFixed(7)}`;
@@ -192,12 +149,16 @@ btn.addEventListener("click", async () => {
       distanceEl.textContent =
         `Distancia al Laboratorio: ${Math.round(dist)} m`;
 
-      // --------------------------------------------------
-      // 6. CREAR CUBOS DE CALIBRACIÓN
-      // --------------------------------------------------
+      console.log(
+        "GPS:",
+        c.latitude,
+        c.longitude,
+        "Precisión:",
+        c.accuracy
+      );
 
       if (!objectsAdded) {
-
+        // Cubos de calibración
         const refs = [
           {
             dLat: 0.0005,
@@ -232,14 +193,8 @@ btn.addEventListener("click", async () => {
           );
         }
 
-        // ------------------------------------------------
-        // 7. CUBO MAGENTA DEL LABORATORIO
-        // ------------------------------------------------
-
-        const targetBox = makeBox(
-          0xff00ff,
-          12
-        );
+        // Cubo magenta del laboratorio
+        const targetBox = makeBox(0xff00ff, 12);
 
         locar.add(
           targetBox,
@@ -256,15 +211,8 @@ btn.addEventListener("click", async () => {
           "GPS inicial recibido. Gira lentamente 360° y busca los cubos."
         );
 
-        // ------------------------------------------------
-        // 8. CARGAR ROUTER 3D
-        // ------------------------------------------------
-
+        // Cargar router 3D
         try {
-          setStatus(
-            "GPS funcionando. Cargando router 3D..."
-          );
-
           const loader = new GLTFLoader();
 
           const gltf = await loader.loadAsync(
@@ -273,17 +221,8 @@ btn.addEventListener("click", async () => {
 
           const router = gltf.scene;
 
-          router.scale.set(
-            5,
-            5,
-            5
-          );
-
-          router.rotation.set(
-            0,
-            0,
-            0
-          );
+          router.scale.set(5, 5, 5);
+          router.rotation.set(0, 0, 0);
 
           locar.add(
             router,
@@ -296,13 +235,10 @@ btn.addEventListener("click", async () => {
             "Router 3D cargado. Gira lentamente 360°."
           );
 
-          console.log(
-            "Router 3D cargado correctamente."
-          );
-
+          console.log("Router 3D cargado correctamente.");
         } catch (error) {
           console.error(
-            "ERROR AL CARGAR ROUTER:",
+            "Error al cargar router:",
             error
           );
 
@@ -313,10 +249,6 @@ btn.addEventListener("click", async () => {
       }
     });
 
-    // ----------------------------------------------------
-    // 9. INICIAR GPS
-    // ----------------------------------------------------
-
     setStatus(
       "Cámara iniciada. Solicitando ubicación GPS..."
     );
@@ -324,23 +256,14 @@ btn.addEventListener("click", async () => {
     await locar.startGps();
 
   } catch (e) {
-    console.error(
-      "ERROR GENERAL:",
-      e
-    );
+    console.error("Error general:", e);
 
-    const msg =
-      e?.message ||
-      String(e);
+    const msg = e?.message || String(e);
 
     setStatus(
       `No se pudo iniciar AR: ${msg}`
     );
 
-    btn.disabled = false;
-    btn.textContent = "REINTENTAR";
-  }
-});
     btn.disabled = false;
     btn.textContent = "REINTENTAR";
   }
